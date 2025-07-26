@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oracle-db
+  namespace: oracle
+  labels:
+    app: oracle-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oracle-db
+  template:
+    metadata:
+      labels:
+        app: oracle-db
+    spec:
+      containers:
+      - name: oracle
+        image: absolutapps/oracle-12c-ee:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 1521
+          name: oracle
+        - containerPort: 5500
+          name: em
+        env:
+        - name: ORACLE_SID
+          value: "ORCLCDB"
+        - name: ORACLE_PDB
+          value: "ORCLPDB1"
+        - name: ORACLE_PWD
+          value: "Oracle123"
+        - name: ORACLE_CHARACTERSET
+          value: "AL32UTF8"
+        volumeMounts:
+        - name: oracle-data
+          mountPath: /opt/oracle/oradata
+      volumes:
+      - name: oracle-data
+        persistentVolumeClaim:
+          claimName: oracle-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oracle-pvc
+  namespace: oracle
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: nfs-client

@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: oracle-db-service
+  namespace: oracle
+  labels:
+    app: oracle-db
+spec:
+  type: NodePort
+  selector:
+    app: oracle-db
+  ports:
+  - port: 1521
+    targetPort: 1521
+    nodePort: 30521
+    name: oracle
+  - port: 5500
+    targetPort: 5500
+    nodePort: 30500
+    name: em
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oracle-db-lb
+  namespace: oracle
+  labels:
+    app: oracle-db
+spec:
+  type: LoadBalancer
+  selector:
+    app: oracle-db
+  ports:
+  - port: 1521
+    targetPort: 1521
+    name: oracle
+  - port: 5500
+    targetPort: 5500
+    name: em
