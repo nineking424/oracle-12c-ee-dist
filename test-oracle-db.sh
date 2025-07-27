@@ -20,7 +20,7 @@ POD_NAME="${2:-oracle-db-0}"
 VERBOSE="${3:-false}"
 USERNAME="system"
 PASSWORD="oracle"
-SERVICE="ORCLCDB"
+SERVICE="ORCL"
 
 # 헤더 출력
 print_header() {

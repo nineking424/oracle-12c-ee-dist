@@ -9,7 +9,7 @@ spec:
   ports:
   - port: 1521
     name: oracle
-  - port: 5500
+  - port: 8080
     name: em
   clusterIP: None
   selector:
@@ -33,32 +33,30 @@ spec:
     spec:
       containers:
       - name: oracle
+        securityContext:
+          privileged: true
         image: absolutapps/oracle-12c-ee:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 1521
           name: oracle
-        - containerPort: 5500
+        - containerPort: 8080
           name: em
         env:
         - name: ORACLE_SID
-          value: "ORCLCDB"
-        - name: ORACLE_PDB
-          value: "ORCLPDB1"
-        - name: ORACLE_PWD
-          value: "Oracle123"
-        - name: ORACLE_CHARACTERSET
-          value: "AL32UTF8"
+          value: "ORCL"
+        - name: SERVICE_NAME
+          value: "ORCL"
+        - name: INIT_MEM_PST
+          value: "40"
         volumeMounts:
         - name: oracle-data
-          mountPath: /opt/oracle/oradata
-        resources:
-          requests:
-            memory: "2Gi"
-            cpu: "1"
-          limits:
-            memory: "4Gi"
-            cpu: "2"
+          mountPath: /u01/app/oracle
+        - name: init-scripts
+          mountPath: /oracle.init.d
+      volumes:
+      - name: init-scripts
+        emptyDir: {}
   volumeClaimTemplates:
   - metadata:
       name: oracle-data

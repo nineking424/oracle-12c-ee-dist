@@ -14,9 +14,9 @@ spec:
     targetPort: 1521
     nodePort: 30521
     name: oracle
-  - port: 5500
-    targetPort: 5500
-    nodePort: 30500
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
     name: em
 ---
 apiVersion: v1
@@ -34,6 +34,6 @@ spec:
   - port: 1521
     targetPort: 1521
     name: oracle
-  - port: 5500
-    targetPort: 5500
+  - port: 8080
+    targetPort: 8080
     name: em
