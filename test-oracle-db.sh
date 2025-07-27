@@ -65,8 +65,11 @@ execute_sql() {
     
     debug "SQL 실행: $query"
     
-    # SQL 실행
-    result=$(kubectl exec $POD_NAME -n $NAMESPACE -- bash -c "echo '$query' | sqlplus -s $USERNAME/$PASSWORD@localhost:1521/$SERVICE" 2>&1)
+    # SQL 실행 - 쿼리를 파일로 전달
+    result=$(kubectl exec $POD_NAME -n $NAMESPACE -- bash -c "cat > /tmp/query.sql << 'SQLEOF'
+$query
+SQLEOF
+    sqlplus -s $USERNAME/$PASSWORD@localhost:1521/$SERVICE < /tmp/query.sql" 2>&1)
     exit_code=$?
     
     # kubectl exec 실패 확인
@@ -172,7 +175,7 @@ execute_sql "SELECT name, open_mode, log_mode, flashback_on FROM v\$database;" "
 
 # 5. 테이블스페이스 정보
 print_section "테이블스페이스 정보"
-execute_sql 'SELECT tablespace_name, status, contents, extent_management FROM dba_tablespaces WHERE tablespace_name NOT LIKE '\''UNDO%'\'' ORDER BY tablespace_name;' "테이블스페이스 목록"
+execute_sql "SELECT tablespace_name, status, contents, extent_management FROM dba_tablespaces WHERE tablespace_name NOT LIKE 'UNDO%' ORDER BY tablespace_name;" "테이블스페이스 목록"
 
 # 6. 데이터파일 사용량
 print_section "스토리지 사용량"
@@ -184,16 +187,16 @@ execute_sql "SELECT name, ROUND(value/1024/1024, 2) AS size_mb FROM v\$sga ORDER
 
 # 8. 세션 정보
 print_section "세션 정보"
-execute_sql 'SELECT COUNT(*) AS total_sessions, SUM(CASE WHEN status = '\''ACTIVE'\'' THEN 1 ELSE 0 END) AS active_sessions, SUM(CASE WHEN type = '\''USER'\'' THEN 1 ELSE 0 END) AS user_sessions FROM v$session;' "세션 통계"
+execute_sql "SELECT COUNT(*) AS total_sessions, SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) AS active_sessions, SUM(CASE WHEN type = 'USER' THEN 1 ELSE 0 END) AS user_sessions FROM v\$session;" "세션 통계"
 
 # 9. 사용자 정보
 print_section "데이터베이스 사용자"
-execute_sql "SELECT username, account_status, created, profile FROM dba_users WHERE username NOT IN ('SYS','SYSTEM','DBSNMP','APPQOSSYS','ORACLE_OCM','DIP','OUTLN','XDB','ANONYMOUS') ORDER BY username;" "사용자 목록"
+execute_sql 'SELECT username, account_status, created, profile FROM dba_users WHERE username NOT IN ('\''SYS'\'','\''SYSTEM'\'','\''DBSNMP'\'','\''APPQOSSYS'\'','\''ORACLE_OCM'\'','\''DIP'\'','\''OUTLN'\'','\''XDB'\'','\''ANONYMOUS'\'') ORDER BY username;' "사용자 목록"
 
 # 10. 현재 실행 중인 쿼리
 if [ "$VERBOSE" = "true" ]; then
     print_section "현재 실행 중인 쿼리"
-    execute_sql 'SELECT s.sid, s.serial#, s.username, s.status, s.sql_id, SUBSTR(q.sql_text, 1, 50) AS sql_text_preview FROM v$session s LEFT JOIN v$sql q ON s.sql_id = q.sql_id WHERE s.type = '\''USER'\'' AND s.username IS NOT NULL ORDER BY s.status DESC, s.sid;' "활성 세션 및 SQL"
+    execute_sql "SELECT s.sid, s.serial#, s.username, s.status, s.sql_id, SUBSTR(q.sql_text, 1, 50) AS sql_text_preview FROM v\$session s LEFT JOIN v\$sql q ON s.sql_id = q.sql_id WHERE s.type = 'USER' AND s.username IS NOT NULL ORDER BY s.status DESC, s.sid;" "활성 세션 및 SQL"
 fi
 
 # 11. 리스너 상태
@@ -218,7 +221,10 @@ if [ "$VERBOSE" = "true" ]; then
     execute_sql "CREATE TABLE test_table (id NUMBER PRIMARY KEY, name VARCHAR2(50), created_at DATE DEFAULT SYSDATE);" "테스트 테이블 생성" false
     
     # 데이터 삽입
-    execute_sql 'INSERT INTO test_table (id, name) VALUES (1, '\''Test Record'\''); COMMIT;' "테스트 데이터 삽입" false
+    execute_sql "INSERT INTO test_table (id, name) VALUES (1, 'Test Record');" "테스트 데이터 삽입" false
+    
+    # 커밋
+    execute_sql "COMMIT;" "트랜잭션 커밋" false
     
     # 데이터 조회
     execute_sql "SELECT * FROM test_table;" "테스트 데이터 조회"
