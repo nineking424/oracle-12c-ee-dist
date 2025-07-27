@@ -69,16 +69,26 @@ execute_sql() {
     result=$(kubectl exec $POD_NAME -n $NAMESPACE -- bash -c "echo '$query' | sqlplus -s $USERNAME/$PASSWORD@localhost:1521/$SERVICE" 2>&1)
     exit_code=$?
     
-    if [ $exit_code -eq 0 ]; then
-        echo -e "  ${GREEN}✅ 성공${NC}"
-    else
-        echo -e "  ${RED}❌ 실패${NC}"
+    # kubectl exec 실패 확인
+    if [ $exit_code -ne 0 ]; then
+        echo -e "  ${RED}❌ 실패 (kubectl exec 오류)${NC}"
         if [ "$VERBOSE" = "true" ]; then
             echo -e "${RED}오류: $result${NC}"
         fi
         return 1
     fi
     
+    # SQL 오류 확인 (ORA-, SP2-, ERROR 등)
+    if echo "$result" | grep -qE "(ORA-|SP2-|ERROR|invalid username/password|not connected)"; then
+        echo -e "  ${RED}❌ 실패 (SQL 오류)${NC}"
+        if [ "$VERBOSE" = "true" ] || [ "$show_output" = "true" ]; then
+            echo -e "\n${DIM}오류 내용:${NC}"
+            echo "$result" | grep -E "(ORA-|SP2-|ERROR|invalid username/password|not connected)" | sed 's/^/  /'
+        fi
+        return 1
+    fi
+    
+    echo -e "  ${GREEN}✅ 성공${NC}"
     debug "SQL 결과: $result"
     
     # 결과 출력
@@ -86,6 +96,8 @@ execute_sql() {
         echo -e "\n${DIM}실행 결과:${NC}"
         echo "$result" | sed 's/^/  /'
     fi
+    
+    return 0
 }
 
 # 함수: Pod 상태 확인
@@ -121,13 +133,32 @@ print_section "데이터베이스 연결 테스트"
 print_progress "Oracle 데이터베이스 연결 테스트 중"
 
 # 간단한 연결 테스트
-if kubectl exec $POD_NAME -n $NAMESPACE -- bash -c "echo 'SELECT 1 FROM DUAL;' | sqlplus -s $USERNAME/$PASSWORD@localhost:1521/$SERVICE" &>/dev/null; then
-    echo -e "${GREEN}✅ 데이터베이스 연결 성공${NC}"
+connection_test=$(kubectl exec $POD_NAME -n $NAMESPACE -- bash -c "echo 'SELECT 1 FROM DUAL;' | sqlplus -s $USERNAME/$PASSWORD@localhost:1521/$SERVICE" 2>&1)
+connection_exit_code=$?
+
+if [ $connection_exit_code -ne 0 ]; then
+    echo -e "${RED}❌ 데이터베이스 연결 실패 (kubectl exec 오류)${NC}"
+    echo -e "\n${DIM}오류 내용:${NC}"
+    echo "$connection_test" | sed 's/^/  /'
+elif echo "$connection_test" | grep -qE "(ORA-|SP2-|ERROR|invalid username/password|not connected)"; then
+    echo -e "${RED}❌ 데이터베이스 연결 실패 (인증 또는 연결 오류)${NC}"
+    echo -e "\n${DIM}오류 내용:${NC}"
+    echo "$connection_test" | grep -E "(ORA-|SP2-|ERROR|invalid username/password|not connected)" | sed 's/^/  /'
+    echo -e "\n${YELLOW}💡 현재 설정:${NC}"
+    echo -e "  • 사용자: ${CYAN}$USERNAME${NC}"
+    echo -e "  • 비밀번호: ${CYAN}$PASSWORD${NC}"
+    echo -e "  • 서비스명: ${CYAN}$SERVICE${NC}"
 else
-    echo -e "${RED}❌ 데이터베이스 연결 실패${NC}"
+    echo -e "${GREEN}✅ 데이터베이스 연결 성공${NC}"
+    debug "연결 테스트 결과: $connection_test"
+fi
+
+if [ $connection_exit_code -ne 0 ] || echo "$connection_test" | grep -qE "(ORA-|SP2-|ERROR|invalid username/password|not connected)"; then
     echo -e "\n${YELLOW}💡 해결 방법:${NC}"
-    echo -e "  • Pod 로그 확인: ${CYAN}kubectl logs $POD_NAME -n $NAMESPACE${NC}"
+    echo -e "  • Pod 로그 확인: ${CYAN}kubectl logs $POD_NAME -n $NAMESPACE --tail=50${NC}"
     echo -e "  • 환경 변수 확인: ${CYAN}kubectl describe pod $POD_NAME -n $NAMESPACE | grep -A 10 Environment${NC}"
+    echo -e "  • 리스너 상태 확인: ${CYAN}kubectl exec $POD_NAME -n $NAMESPACE -- lsnrctl status${NC}"
+    echo -e "  • 직접 접속 시도: ${CYAN}kubectl exec -it $POD_NAME -n $NAMESPACE -- sqlplus / as sysdba${NC}"
     exit 1
 fi
 
